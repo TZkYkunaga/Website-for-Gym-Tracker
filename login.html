@@ -79,7 +79,18 @@
 
       function showError(msg){ alert(msg); }
 
-      signUpForm.addEventListener('submit', (ev)=>{
+      async function remoteAuth(action, username, password){
+        try{
+          const res = await fetch(`/api/auth?action=${action}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+          });
+          const json = await res.json();
+          return { ok: res.ok, status: res.status, body: json };
+        }catch(e){ return { ok: false, error: e.message }; }
+      }
+
+      signUpForm.addEventListener('submit', async (ev)=>{
         ev.preventDefault();
         const usernameEl = document.getElementById('signUpUsername');
         const passEl = document.getElementById('signUpPassword');
@@ -101,20 +112,37 @@
         if(!pass || pass.length < 6){ helpPass.textContent = 'Mật khẩu phải có ít nhất 6 ký tự'; helpPass.classList.remove('d-none'); return; }
         if(pass !== confirm){ helpConfirm.textContent = 'Mật khẩu xác nhận không khớp'; helpConfirm.classList.remove('d-none'); return; }
 
+        // Try remote signup first (Netlify function). If it fails or the API isn't available, fallback to localStorage.
+        const remote = await remoteAuth('signup', username, pass);
+        if(remote.ok){
+          localStorage.setItem('simple-user', username);
+          location.href = 'index.html';
+          return;
+        }
+
+        // fallback: local
         const users = getUsers();
         if(users.find(u=>u.username.toLowerCase()===username.toLowerCase())){ helpUser.textContent = 'Username đã tồn tại'; helpUser.classList.remove('d-none'); return; }
-
         users.push({ username, password: pass });
         saveUsers(users);
-        // auto-login
         localStorage.setItem('simple-user', username);
         location.href = 'index.html';
       });
 
-      signInForm.addEventListener('submit', (ev)=>{
+      signInForm.addEventListener('submit', async (ev)=>{
         ev.preventDefault();
         const username = document.getElementById('signInUsername').value.trim();
         const pass = document.getElementById('signInPassword').value;
+
+        // Try remote signin first
+        const remote = await remoteAuth('signin', username, pass);
+        if(remote.ok){
+          localStorage.setItem('simple-user', username);
+          location.href = 'index.html';
+          return;
+        }
+
+        // fallback local
         const users = getUsers();
         const found = users.find(u=>u.username===username && u.password===pass);
         if(!found) return showError('Username hoặc mật khẩu không đúng');
