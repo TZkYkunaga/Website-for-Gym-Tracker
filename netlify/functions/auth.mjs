@@ -36,6 +36,28 @@ export const handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ id: row.id, username: row.username }) };
     }
 
+    // Admin actions: list, create (admin), delete
+    if (action === 'list') {
+      const rows = await sql`SELECT id, username FROM users ORDER BY id`;
+      return { statusCode: 200, body: JSON.stringify(rows) };
+    }
+
+    if (action === 'create') {
+      // body should contain username/password
+      // reuse signup logic but return the created row
+      const [existing] = await sql`SELECT id FROM users WHERE lower(username)=lower(${username})`;
+      if (existing) return { statusCode: 409, body: JSON.stringify({ error: 'exists' }) };
+      const [ins] = await sql`INSERT INTO users(username, password) VALUES (${username}, ${password}) RETURNING id, username`;
+      return { statusCode: 201, body: JSON.stringify(ins) };
+    }
+
+    if (action === 'delete') {
+      const id = body.id;
+      if (!id) return { statusCode: 400, body: JSON.stringify({ error: 'missing id' }) };
+      await sql`DELETE FROM users WHERE id=${id}`;
+      return { statusCode: 200, body: JSON.stringify({ ok: true }) };
+    }
+
     return { statusCode: 400, body: JSON.stringify({ error: 'Unknown action' }) };
   } catch (err) {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
