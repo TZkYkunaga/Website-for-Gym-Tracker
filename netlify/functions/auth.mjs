@@ -37,14 +37,32 @@ export const handler = async (event) => {
     }
 
     // Admin actions: list, create (admin), delete
+    const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
+    // helper to verify admin: either token or admin credentials in body
+    async function isAdminRequest(eventBody){
+      // token header?
+      const auth = event.headers && (event.headers.authorization || event.headers.Authorization);
+      const token = auth && auth.replace(/^Bearer\s+/i, '');
+      if (ADMIN_TOKEN && token && token === ADMIN_TOKEN) return true;
+
+      // fallback: if ADMIN_TOKEN not set, allow admin by verifying body.adminUsername/adminPassword against DB user 'admin'
+      const auser = (eventBody && eventBody.adminUsername) ? String(eventBody.adminUsername).trim() : null;
+      const apass = (eventBody && eventBody.adminPassword) ? String(eventBody.adminPassword) : null;
+      if (!auser || !apass) return false;
+      // check DB for 'admin' user
+      const [row] = await sql`SELECT id FROM users WHERE username=${auser} AND password=${apass}`;
+      return !!row && auser.toLowerCase() === 'admin';
+    }
+
     if (action === 'list') {
+      if (!(await isAdminRequest(body))) return { statusCode: 401, body: JSON.stringify({ error: 'unauthorized' }) };
       const rows = await sql`SELECT id, username FROM users ORDER BY id`;
       return { statusCode: 200, body: JSON.stringify(rows) };
     }
 
     if (action === 'create') {
+      if (!(await isAdminRequest(body))) return { statusCode: 401, body: JSON.stringify({ error: 'unauthorized' }) };
       // body should contain username/password
-      // reuse signup logic but return the created row
       const [existing] = await sql`SELECT id FROM users WHERE lower(username)=lower(${username})`;
       if (existing) return { statusCode: 409, body: JSON.stringify({ error: 'exists' }) };
       const [ins] = await sql`INSERT INTO users(username, password) VALUES (${username}, ${password}) RETURNING id, username`;
@@ -52,6 +70,7 @@ export const handler = async (event) => {
     }
 
     if (action === 'delete') {
+      if (!(await isAdminRequest(body))) return { statusCode: 401, body: JSON.stringify({ error: 'unauthorized' }) };
       const id = body.id;
       if (!id) return { statusCode: 400, body: JSON.stringify({ error: 'missing id' }) };
       await sql`DELETE FROM users WHERE id=${id}`;

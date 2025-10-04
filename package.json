@@ -3,7 +3,13 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "netlify dev"
+    "start": "netlify dev",
+    "dev": "netlify dev",
+    "build": "echo \"No build step (static site)\"",
+    "deploy": "netlify deploy --prod"
+  },
+  "engines": {
+    "node": "16.x"
   },
   "dependencies": {
     "@netlify/neon": "^1.0.0"

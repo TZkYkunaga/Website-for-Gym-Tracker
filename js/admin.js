@@ -5,9 +5,19 @@
 
   function getUsersLocal(){ try{ return JSON.parse(localStorage.getItem('simple-users')||'[]'); }catch(e){ return []; } }
   function saveUsersLocal(list){ localStorage.setItem('simple-users', JSON.stringify(list)); }
+  function getLocalCurrentUser(){ return localStorage.getItem('simple-user') || null; }
+
 
   async function api(action, payload){
     try{
+      // include admin creds in payload if current user is admin locally (fallback auth)
+      const current = getLocalCurrentUser();
+      if(current && (!payload || !payload.adminUsername)){
+        // look up password in local users
+        const users = getUsersLocal();
+        const u = users.find(x=>x.username===current);
+        if(u){ payload = Object.assign({}, payload||{}, { adminUsername: current, adminPassword: u.password }); }
+      }
       const res = await fetch(`/api/auth?action=${action}`, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(payload||{}) });
       const json = await res.json();
       return { ok: res.ok, status: res.status, body: json };
@@ -23,6 +33,23 @@
 
     render(list);
   }
+
+  // ensure the current user is admin locally
+  (function ensureAdmin(){
+    const current = getLocalCurrentUser();
+    if(!current){ location.href = 'login.html'; return; }
+    if(current.toLowerCase() !== 'admin'){
+      // not admin — redirect to login
+      location.href = 'login.html';
+      return;
+    }
+    // if admin user not present in local users, create default admin/admin
+    const users = getUsersLocal();
+    if(!users.find(u=>u.username.toLowerCase() === 'admin')){
+      users.unshift({ username: 'admin', password: 'admin' });
+      saveUsersLocal(users);
+    }
+  })();
 
   function render(list){
     if(!list || !list.length){ usersContainer.innerHTML = '<div class="text-muted">No users</div>'; return; }
